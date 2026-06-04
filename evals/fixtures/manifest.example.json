@@ -1,0 +1,12 @@
+[
+  {
+    "image": "grilled_chicken_rice.jpg",
+    "media_type": "image/jpeg",
+    "truth": { "calories": 520, "protein_g": 45, "carbs_g": 55, "fat_g": 9 }
+  },
+  {
+    "image": "salmon_broccoli.jpg",
+    "media_type": "image/jpeg",
+    "truth": { "calories": 410, "protein_g": 38, "carbs_g": 12, "fat_g": 24 }
+  }
+]

@@ -1,0 +1,13 @@
+node_modules/
+.env
+.env.local
+dist/
+.expo/
+*.log
+.DS_Store
+drizzle/meta/
+evals/fixtures/*.jpg
+evals/fixtures/*.jpeg
+evals/fixtures/*.png
+evals/fixtures/manifest.json
+env/

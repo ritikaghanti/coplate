@@ -1,0 +1,50 @@
+import type {
+  AnalyzePlateResponse,
+  CreateMealRequest,
+  DailySummary,
+  LoggedMeal,
+  PizzaModePlan,
+  PizzaModePlanRequest,
+} from "@coplate/shared";
+
+/**
+ * Set this to your laptop's LAN IP (e.g. http://192.168.1.42:3000) so your
+ * iPhone running Expo Go can reach the API. `localhost` will NOT work from
+ * the phone — that points at the phone itself. Find your IP with `ipconfig
+ * getifaddr en0` (macOS).
+ */
+ export const API_BASE = "http://10.2.1.5:3000";
+
+async function req<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...init,
+    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`API ${res.status}: ${body}`);
+  }
+  return res.json() as Promise<T>;
+}
+
+export function analyzePlate(imageBase64: string): Promise<AnalyzePlateResponse> {
+  return req<AnalyzePlateResponse>("/analyze", {
+    method: "POST",
+    body: JSON.stringify({ image_base64: imageBase64, media_type: "image/jpeg" }),
+  });
+}
+
+export function logMeal(body: CreateMealRequest): Promise<LoggedMeal> {
+  return req<LoggedMeal>("/meals", { method: "POST", body: JSON.stringify(body) });
+}
+
+export function getTodaySummary(): Promise<DailySummary> {
+  return req<DailySummary>("/summary/today");
+}
+
+export function planPizzaMode(body: PizzaModePlanRequest): Promise<PizzaModePlan> {
+  return req<PizzaModePlan>("/pizza-mode/plan", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}

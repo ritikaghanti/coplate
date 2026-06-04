@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "Coplate",
+    "slug": "coplate",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "coplate",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.coplate.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Coplate uses the camera to identify food on your plate."
+      }
+    },
+    "plugins": [
+      "expo-router",
+      ["expo-camera", { "cameraPermission": "Allow Coplate to use your camera to log meals." }]
+    ]
+  }
+}
