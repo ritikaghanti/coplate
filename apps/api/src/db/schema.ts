@@ -2,12 +2,13 @@ import { pgTable, uuid, timestamp, jsonb, integer, date, text, boolean } from "d
 import type { FoodItem, Macros } from "@coplate/shared";
 
 /**
- * For the Phase-0 slice we keep a single implicit user. The `users` table
- * exists so auth slots in later without a migration rewrite.
+ * Users. `passwordHash` holds a bcrypt hash — never the plaintext password.
+ * Email is unique so it can serve as the login identifier.
  */
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
-  email: text("email"),
+  email: text("email").unique(),
+  passwordHash: text("password_hash"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

@@ -37,6 +37,35 @@ export type PizzaModePlanRequest = z.infer<typeof PizzaModePlanRequestSchema>;
 export const CreateReservationRequestSchema = PizzaModePlanRequestSchema;
 export type CreateReservationRequest = z.infer<typeof CreateReservationRequestSchema>;
 
+/**
+ * Parse a "h:mm AM/PM" string into a 24-hour number (e.g. "8:00 PM" -> 20).
+ * Returns null if it can't parse.
+ */
+export function parseEventHour(eventTime: string): number | null {
+  const m = eventTime.trim().match(/^(\d{1,2}):?(\d{2})?\s*(AM|PM)?$/i);
+  if (!m) return null;
+  let hour = parseInt(m[1], 10);
+  const meridiem = m[3]?.toUpperCase();
+  if (meridiem === "PM" && hour < 12) hour += 12;
+  if (meridiem === "AM" && hour === 12) hour = 0;
+  if (hour < 0 || hour > 23) return null;
+  return hour;
+}
+
+/**
+ * Classify when the event falls so guidance can adapt: an early event means
+ * most of the day comes *after* it; a late event means you eat lighter
+ * *before* it. The cutoffs are deliberately simple.
+ */
+export type DayPhase = "morning" | "midday" | "evening";
+export function eventDayPhase(eventTime: string): DayPhase {
+  const hour = parseEventHour(eventTime);
+  if (hour === null) return "evening"; // safe default
+  if (hour < 11) return "morning";
+  if (hour < 16) return "midday";
+  return "evening";
+}
+
 /** The result the UI renders: the reshaped numbers + a coaching message. */
 export const PizzaModePlanSchema = z.object({
   dailyBudget: MacrosSchema,

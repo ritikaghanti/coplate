@@ -4,6 +4,7 @@ import {
   rebalanceForEvent,
   roundMacros,
   describeDietaryConstraints,
+  eventDayPhase,
   type Macros,
   type DietaryProfile,
   type PizzaModePlan,
@@ -52,6 +53,17 @@ async function generateGuidance(
 ): Promise<string> {
   const constraints = describeDietaryConstraints(profile);
   const hasAllergies = profile.allergies.trim().length > 0;
+  const phase = eventDayPhase(req.eventTime);
+
+  // Tell the model which meals actually surround the event, so it doesn't
+  // assume dinner. Morning event => structure the meals AFTER it; evening
+  // event => structure breakfast/lunch BEFORE it.
+  const timingInstruction =
+    phase === "morning"
+      ? `The event is in the MORNING, so most of the day comes AFTER it. Advise how to eat lightly for the REST of the day (lunch and dinner) after the event, not before.`
+      : phase === "midday"
+        ? `The event is around MIDDAY, so advise a light breakfast before and a light dinner after — the event is the main meal in the middle.`
+        : `The event is in the EVENING, so advise how to structure breakfast and lunch BEFORE it.`;
 
   const msg = await client.messages.create({
     model: MODEL,
@@ -59,17 +71,19 @@ async function generateGuidance(
     system:
       "You are a supportive nutrition co-pilot. Give ONE short, warm paragraph " +
       "(2-3 sentences, no lists, no markdown) telling the user how to structure " +
-      "their breakfast and lunch to save room for tonight's event while staying " +
-      "on track. Be specific about protein and fats. STRICTLY respect the user's " +
-      "dietary constraints — never suggest foods that violate their diet or " +
-      "allergies. Never present any suggestion as guaranteed allergen-free. " +
-      "Never shame; keep it upbeat.",
+      "their other meals around a planned event while staying on track. Be " +
+      "specific about protein and fats. Pay attention to WHEN the event is and " +
+      "only reference meals that actually make sense relative to that time. " +
+      "STRICTLY respect the user's dietary constraints — never suggest foods " +
+      "that violate their diet or allergies. Never present any suggestion as " +
+      "guaranteed allergen-free. Never shame; keep it upbeat.",
     messages: [
       {
         role: "user",
         content:
-          `Tonight: ${req.venueLabel} at ${req.eventTime}, reserving ~${req.eventCalories} cal.\n` +
-          `Daytime budget left for breakfast + lunch: ${daytime.calories} cal, ` +
+          `Event: ${req.venueLabel} at ${req.eventTime}, reserving ~${req.eventCalories} cal.\n` +
+          `${timingInstruction}\n` +
+          `Budget left for the rest of the day's meals: ${daytime.calories} cal, ` +
           `${daytime.protein_g}g protein, ${daytime.carbs_g}g carbs, ${daytime.fat_g}g fat.\n` +
           `User's dietary constraints: ${constraints}\n` +
           `Give the structuring advice.`,
@@ -91,14 +105,19 @@ function fallbackGuidance(
   daytime: Macros,
   profile: DietaryProfile
 ): string {
-  const perMeal = Math.round(daytime.calories / 2);
+  const phase = eventDayPhase(req.eventTime);
   const dietNote =
     profile.dietType !== "none" ? ` Keep it ${profile.dietType}-friendly.` : "";
   const allergyNote = profile.allergies.trim() ? ALLERGY_DISCLAIMER : "";
+  const when =
+    phase === "morning"
+      ? `for the rest of the day after ${req.venueLabel}`
+      : phase === "midday"
+        ? `around ${req.venueLabel} in the middle of your day`
+        : `before ${req.venueLabel} tonight`;
   return (
-    `You've got ${daytime.calories} calories for the day before ${req.venueLabel}. ` +
-    `Aim for roughly ${perMeal} at breakfast and ${perMeal} at lunch, leaning on lean ` +
-    `protein and vegetables and keeping fats light — tonight will cover those.${dietNote} ` +
-    `Enjoy the evening; it's already in the plan.${allergyNote}`
+    `You've got about ${daytime.calories} calories to spread across your other meals ${when}. ` +
+    `Lean on lean protein and vegetables and keep fats light — the event will cover those.${dietNote} ` +
+    `Enjoy it; it's already in the plan.${allergyNote}`
   );
 }

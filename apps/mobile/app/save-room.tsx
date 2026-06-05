@@ -12,7 +12,10 @@ export default function SaveRoom() {
   const [phase, setPhase] = useState<Phase>("setup");
   const [venue, setVenue] = useState(VENUE_PRESETS[0]);
   const [calories, setCalories] = useState(String(VENUE_PRESETS[0].calories));
-  const [time, setTime] = useState("8:00 PM");
+  const [hour, setHour] = useState(8);
+  const [minute, setMinute] = useState(0);
+  const [meridiem, setMeridiem] = useState<"AM" | "PM">("PM");
+  const time = `${hour}:${String(minute).padStart(2, "0")} ${meridiem}`;
   const [plan, setPlan] = useState<PizzaModePlan | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -153,13 +156,47 @@ export default function SaveRoom() {
       <Text style={styles.hint}>Estimated for {venue.label.toLowerCase()} — edit if you like.</Text>
 
       <Text style={styles.fieldLabel}>What time?</Text>
-      <TextInput
-        style={[styles.input, { marginBottom: theme.space(2) }]}
-        value={time}
-        onChangeText={setTime}
-        placeholder="8:00 PM"
-        placeholderTextColor={theme.color.textMuted}
-      />
+      <View style={styles.timeRow}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.timeScroll}
+          contentContainerStyle={styles.timeScrollContent}
+        >
+          {Array.from({ length: 12 }, (_, i) => i + 1).map((h) => (
+            <Pressable
+              key={h}
+              style={[styles.timeChip, hour === h && styles.timeChipActive]}
+              onPress={() => setHour(h)}
+            >
+              <Text style={[styles.timeChipText, hour === h && styles.timeChipTextActive]}>{h}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+      </View>
+      <View style={styles.timeRow}>
+        {[0, 15, 30, 45].map((m) => (
+          <Pressable
+            key={m}
+            style={[styles.timeChip, minute === m && styles.timeChipActive]}
+            onPress={() => setMinute(m)}
+          >
+            <Text style={[styles.timeChipText, minute === m && styles.timeChipTextActive]}>
+              :{String(m).padStart(2, "0")}
+            </Text>
+          </Pressable>
+        ))}
+        {(["AM", "PM"] as const).map((mer) => (
+          <Pressable
+            key={mer}
+            style={[styles.timeChip, meridiem === mer && styles.timeChipActive]}
+            onPress={() => setMeridiem(mer)}
+          >
+            <Text style={[styles.timeChipText, meridiem === mer && styles.timeChipTextActive]}>{mer}</Text>
+          </Pressable>
+        ))}
+      </View>
+      <Text style={styles.hint}>Event at {time}</Text>
 
       {error && <Text style={styles.error}>{error}</Text>}
 
@@ -194,6 +231,17 @@ const styles = StyleSheet.create({
   },
   inputSuffix: { color: theme.color.textMuted, fontSize: 16 },
   hint: { color: theme.color.textMuted, fontSize: 13, marginTop: theme.space(2), fontStyle: "italic" },
+  timeRow: { flexDirection: "row", flexWrap: "wrap", gap: theme.space(2), marginBottom: theme.space(2) },
+  timeScroll: { flexGrow: 0 },
+  timeScrollContent: { gap: theme.space(2) },
+  timeChip: {
+    minWidth: 44, paddingHorizontal: theme.space(3), paddingVertical: theme.space(3),
+    borderRadius: theme.radius.md, borderWidth: 1, borderColor: theme.color.border,
+    backgroundColor: theme.color.surface, alignItems: "center",
+  },
+  timeChipActive: { backgroundColor: theme.color.accentSoft, borderColor: theme.color.accent },
+  timeChipText: { color: theme.color.textMuted, fontSize: 15 },
+  timeChipTextActive: { color: theme.color.accent, fontWeight: "700" },
   error: { color: theme.color.danger, marginTop: theme.space(4) },
   primaryBtn: {
     backgroundColor: theme.color.accent, borderRadius: theme.radius.pill,

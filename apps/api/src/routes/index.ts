@@ -1,4 +1,4 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { and, eq } from "drizzle-orm";
 import {
   AnalyzePlateRequestSchema,
@@ -7,6 +7,7 @@ import {
   CreateReservationRequestSchema,
   UpdateDietaryProfileSchema,
   DietaryProfileSchema,
+  CredentialsSchema,
   type DailySummary,
   type LoggedMeal,
   type DietaryProfile,
@@ -19,13 +20,28 @@ import {
 import { db, schema } from "../db/index.js";
 import { analyzePlate } from "../lib/vision.js";
 import { buildSaveRoomPlan } from "../lib/saveRoom.js";
+import { hashPassword, verifyPassword, signToken, verifyToken } from "../lib/auth.js";
 
-// Single implicit user for the Phase-0 slice. Auth replaces this later.
-const DEMO_USER_ID = "00000000-0000-0000-0000-000000000001";
 const DEFAULT_BUDGET = { calories: 2000, protein_g: 150, carbs_g: 200, fat_g: 65 };
 
 function todayStr(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+/**
+ * Pull the authenticated user id from the Bearer token. Returns the id, or
+ * sends a 401 and returns null if the token is missing/invalid. Every
+ * protected handler calls this first.
+ */
+function requireUser(request: FastifyRequest, reply: FastifyReply): string | null {
+  const header = request.headers.authorization;
+  const token = header?.startsWith("Bearer ") ? header.slice(7) : null;
+  const userId = token ? verifyToken(token) : null;
+  if (!userId) {
+    reply.status(401).send({ error: "Not authenticated" });
+    return null;
+  }
+  return userId;
 }
 
 /** Load the user's dietary profile, defaulting to no-restriction if unset. */
@@ -45,8 +61,43 @@ async function loadProfile(userId: string): Promise<DietaryProfile> {
 export async function registerRoutes(app: FastifyInstance) {
   app.get("/health", async () => ({ ok: true }));
 
+  /** Sign up: create a user with a hashed password, return a token. */
+  app.post("/auth/signup", async (request, reply) => {
+    const parse = CredentialsSchema.safeParse(request.body);
+    if (!parse.success) {
+      return reply.status(400).send({ error: "Invalid credentials", details: parse.error.flatten() });
+    }
+    const email = parse.data.email.toLowerCase();
+    const [existing] = await db.select().from(schema.users).where(eq(schema.users.email, email));
+    if (existing) {
+      return reply.status(409).send({ error: "An account with this email already exists" });
+    }
+    const passwordHash = await hashPassword(parse.data.password);
+    const [user] = await db.insert(schema.users).values({ email, passwordHash }).returning();
+    const token = signToken(user.id);
+    return reply.status(201).send({ token, user: { id: user.id, email } });
+  });
+
+  /** Log in: verify password, return a token. */
+  app.post("/auth/login", async (request, reply) => {
+    const parse = CredentialsSchema.safeParse(request.body);
+    if (!parse.success) {
+      return reply.status(400).send({ error: "Invalid credentials" });
+    }
+    const email = parse.data.email.toLowerCase();
+    const [user] = await db.select().from(schema.users).where(eq(schema.users.email, email));
+    // Same generic error whether email is unknown or password is wrong — avoids
+    // leaking which emails have accounts.
+    if (!user || !user.passwordHash || !(await verifyPassword(parse.data.password, user.passwordHash))) {
+      return reply.status(401).send({ error: "Incorrect email or password" });
+    }
+    const token = signToken(user.id);
+    return reply.send({ token, user: { id: user.id, email } });
+  });
+
   /** Vision pipeline: photo -> validated, grounded macros + observability meta. */
   app.post("/analyze", async (request, reply) => {
+    if (!requireUser(request, reply)) return;
     const parse = AnalyzePlateRequestSchema.safeParse(request.body);
     if (!parse.success) {
       return reply.status(400).send({ error: "Invalid request", details: parse.error.flatten() });
@@ -66,12 +117,14 @@ export async function registerRoutes(app: FastifyInstance) {
 
   /** Save Room: reshape today's budget around a planned event. */
   app.post("/save-room/plan", async (request, reply) => {
+    const userId = requireUser(request, reply);
+    if (!userId) return;
     const parse = PizzaModePlanRequestSchema.safeParse(request.body);
     if (!parse.success) {
       return reply.status(400).send({ error: "Invalid request", details: parse.error.flatten() });
     }
     try {
-      const profile = await loadProfile(DEMO_USER_ID);
+      const profile = await loadProfile(userId);
       // Future: subtract calories already consumed today from DEFAULT_BUDGET.
       const plan = await buildSaveRoomPlan(parse.data, DEFAULT_BUDGET, profile);
       return plan;
@@ -82,12 +135,16 @@ export async function registerRoutes(app: FastifyInstance) {
   });
 
   /** Get the user's dietary profile. */
-  app.get("/profile", async () => {
-    return loadProfile(DEMO_USER_ID);
+  app.get("/profile", async (request, reply) => {
+    const userId = requireUser(request, reply);
+    if (!userId) return;
+    return loadProfile(userId);
   });
 
   /** Create or update the user's dietary profile (upsert). */
   app.put("/profile", async (request, reply) => {
+    const userId = requireUser(request, reply);
+    if (!userId) return;
     const parse = UpdateDietaryProfileSchema.safeParse(request.body);
     if (!parse.success) {
       return reply.status(400).send({ error: "Invalid request", details: parse.error.flatten() });
@@ -95,7 +152,7 @@ export async function registerRoutes(app: FastifyInstance) {
     const { dietType, allergies, dislikes } = parse.data;
     await db
       .insert(schema.dietaryProfiles)
-      .values({ userId: DEMO_USER_ID, dietType, allergies, dislikes })
+      .values({ userId, dietType, allergies, dislikes })
       .onConflictDoUpdate({
         target: schema.dietaryProfiles.userId,
         set: { dietType, allergies, dislikes, updatedAt: new Date() },
@@ -105,6 +162,8 @@ export async function registerRoutes(app: FastifyInstance) {
 
   /** Persist a confirmed meal. */
   app.post("/meals", async (request, reply) => {
+    const userId = requireUser(request, reply);
+    if (!userId) return;
     const parse = CreateMealRequestSchema.safeParse(request.body);
     if (!parse.success) {
       return reply.status(400).send({ error: "Invalid request", details: parse.error.flatten() });
@@ -112,7 +171,7 @@ export async function registerRoutes(app: FastifyInstance) {
     const [row] = await db
       .insert(schema.meals)
       .values({
-        userId: DEMO_USER_ID,
+        userId,
         loggedDate: todayStr(),
         items: parse.data.items,
         total: parse.data.total,
@@ -132,6 +191,8 @@ export async function registerRoutes(app: FastifyInstance) {
 
   /** Create or replace today's Save Room reservation. */
   app.post("/reservations", async (request, reply) => {
+    const userId = requireUser(request, reply);
+    if (!userId) return;
     const parse = CreateReservationRequestSchema.safeParse(request.body);
     if (!parse.success) {
       return reply.status(400).send({ error: "Invalid request", details: parse.error.flatten() });
@@ -140,11 +201,11 @@ export async function registerRoutes(app: FastifyInstance) {
     // One reservation per day: clear any existing one first.
     await db
       .delete(schema.reservations)
-      .where(eq(schema.reservations.userId, DEMO_USER_ID));
+      .where(and(eq(schema.reservations.userId, userId), eq(schema.reservations.reservedDate, todayStr())));
     const [row] = await db
       .insert(schema.reservations)
       .values({
-        userId: DEMO_USER_ID,
+        userId,
         reservedDate: todayStr(),
         venueLabel: parse.data.venueLabel,
         eventTime: parse.data.eventTime,
@@ -159,20 +220,24 @@ export async function registerRoutes(app: FastifyInstance) {
     });
   });
 
-  /** Clear today's reservation. */
-  app.delete("/reservations/today", async () => {
+  /** Clear the user's reservation (date-independent so it always works). */
+  app.delete("/reservations/today", async (request, reply) => {
+    const userId = requireUser(request, reply);
+    if (!userId) return;
     await db
       .delete(schema.reservations)
-      .where(eq(schema.reservations.userId, DEMO_USER_ID));
-      return { cleared: true };
+      .where(eq(schema.reservations.userId, userId));
+    return { cleared: true };
   });
 
   /** Today's rollup for the home screen — reservation-aware. */
-  app.get("/summary/today", async () => {
+  app.get("/summary/today", async (request, reply) => {
+    const userId = requireUser(request, reply);
+    if (!userId) return;
     const rows = await db
       .select()
       .from(schema.meals)
-      .where(and(eq(schema.meals.userId, DEMO_USER_ID), eq(schema.meals.loggedDate, todayStr())));
+      .where(and(eq(schema.meals.userId, userId), eq(schema.meals.loggedDate, todayStr())));
 
     const meals: LoggedMeal[] = rows.map((r) => ({
       id: r.id,
@@ -185,7 +250,7 @@ export async function registerRoutes(app: FastifyInstance) {
     const [resRow] = await db
       .select()
       .from(schema.reservations)
-      .where(eq(schema.reservations.userId, DEMO_USER_ID));
+      .where(and(eq(schema.reservations.userId, userId), eq(schema.reservations.reservedDate, todayStr())));
 
     const reservation = resRow
       ? { id: resRow.id, venueLabel: resRow.venueLabel, eventTime: resRow.eventTime, reserve: roundMacros(resRow.reserve) }
