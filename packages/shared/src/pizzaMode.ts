@@ -33,6 +33,10 @@ export const PizzaModePlanRequestSchema = z.object({
 });
 export type PizzaModePlanRequest = z.infer<typeof PizzaModePlanRequestSchema>;
 
+/** Request to persist a reservation for today (same shape as a plan request). */
+export const CreateReservationRequestSchema = PizzaModePlanRequestSchema;
+export type CreateReservationRequest = z.infer<typeof CreateReservationRequestSchema>;
+
 /** The result the UI renders: the reshaped numbers + a coaching message. */
 export const PizzaModePlanSchema = z.object({
   dailyBudget: MacrosSchema,

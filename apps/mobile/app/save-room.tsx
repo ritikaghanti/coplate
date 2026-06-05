@@ -2,12 +2,12 @@ import { useState } from "react";
 import { View, Text, StyleSheet, Pressable, ScrollView, TextInput, ActivityIndicator } from "react-native";
 import { useRouter } from "expo-router";
 import { VENUE_PRESETS, type PizzaModePlan } from "@coplate/shared";
-import { planSaveRoom } from "../lib/api";
+import { planSaveRoom, createReservation } from "../lib/api";
 import { theme } from "../lib/theme";
 
-type Phase = "setup" | "loading" | "result";
+type Phase = "setup" | "loading" | "result" | "saving";
 
-export default function PizzaMode() {
+export default function SaveRoom() {
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>("setup");
   const [venue, setVenue] = useState(VENUE_PRESETS[0]);
@@ -15,6 +15,19 @@ export default function PizzaMode() {
   const [time, setTime] = useState("8:00 PM");
   const [plan, setPlan] = useState<PizzaModePlan | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  async function confirmReservation() {
+    const cals = parseInt(calories, 10);
+    try {
+      setError(null);
+      setPhase("saving");
+      await createReservation({ venueLabel: venue.label, eventCalories: cals, eventTime: time });
+      router.back();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save reservation");
+      setPhase("result");
+    }
+  }
 
   function pickVenue(v: (typeof VENUE_PRESETS)[number]) {
     setVenue(v);
@@ -52,7 +65,7 @@ export default function PizzaMode() {
     );
   }
 
-  if (phase === "result" && plan) {
+  if ((phase === "result" || phase === "saving") && plan) {
     return (
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         <Text style={styles.resultKicker}>YOUR DAY, REPLANNED</Text>
@@ -85,8 +98,16 @@ export default function PizzaMode() {
           <Text style={styles.guidanceText}>{plan.guidance}</Text>
         </View>
 
-        <Pressable style={styles.primaryBtn} onPress={() => router.back()}>
-          <Text style={styles.primaryBtnText}>Got it — I'm set</Text>
+        <Pressable
+          style={styles.primaryBtn}
+          disabled={phase === "saving"}
+          onPress={confirmReservation}
+        >
+          {phase === "saving" ? (
+            <ActivityIndicator color="#1A140C" />
+          ) : (
+            <Text style={styles.primaryBtnText}>Lock it in</Text>
+          )}
         </Pressable>
         <Pressable style={styles.secondaryBtn} onPress={() => setPhase("setup")}>
           <Text style={styles.secondaryBtnText}>Adjust</Text>

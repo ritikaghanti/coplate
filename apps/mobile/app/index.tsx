@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl } from "r
 import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { DailySummary } from "@coplate/shared";
-import { getTodaySummary } from "../lib/api";
+import { getTodaySummary, clearReservation } from "../lib/api";
 import { MacroBar } from "../components/MacroBar";
 import { theme } from "../lib/theme";
 
@@ -25,9 +25,23 @@ export default function Home() {
     }
   }, []);
 
+  async function clearRes() {
+    try {
+      await clearReservation();
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not clear");
+    }
+  }
+
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  const remainingCals = summary?.remaining.calories ?? 0;
+  const hasReservation = !!summary?.reservation;
+  // When a reservation exists, the hero tracks the daytime budget (what you
+  // need to hit before the event); otherwise the full daily remaining.
+  const remainingCals = hasReservation
+    ? summary!.daytimeRemaining.calories
+    : summary?.remaining.calories ?? 0;
   const over = remainingCals < 0;
 
   return (
@@ -54,13 +68,52 @@ export default function Home() {
             {Math.abs(remainingCals)}
           </Text>
           <Text style={styles.bigLabel}>
-            {over ? "calories over budget" : "calories remaining"}
+            {over
+              ? hasReservation ? "over your daytime budget" : "calories over budget"
+              : hasReservation ? "daytime calories left before tonight" : "calories remaining"}
           </Text>
         </View>
 
+        {hasReservation && summary && (
+          <View style={styles.reservationCard}>
+            <View style={styles.reservationHeader}>
+              <Text style={styles.reservationTitle}>
+                🍽️ {summary.reservation!.venueLabel} · {summary.reservation!.eventTime}
+              </Text>
+              <Pressable onPress={clearRes}>
+                <Text style={styles.clearLink}>Clear</Text>
+              </Pressable>
+            </View>
+            <View style={styles.resRow}>
+              <Text style={styles.resLabel}>Daily budget</Text>
+              <Text style={styles.resValue}>{summary.budget.calories}</Text>
+            </View>
+            <View style={styles.resRow}>
+              <Text style={[styles.resLabel, { color: theme.color.accent }]}>Reserved for tonight</Text>
+              <Text style={[styles.resValue, { color: theme.color.accent }]}>−{summary.reservation!.reserve.calories}</Text>
+            </View>
+            <View style={styles.resRow}>
+              <Text style={styles.resLabel}>Eaten today (daytime)</Text>
+              <Text style={styles.resValue}>−{summary.daytimeConsumed.calories}</Text>
+            </View>
+            {summary.eventConsumed.calories > 0 && (
+              <View style={styles.resRow}>
+                <Text style={styles.resLabel}>Event meal logged</Text>
+                <Text style={styles.resValue}>{summary.eventConsumed.calories} / {summary.reservation!.reserve.calories}</Text>
+              </View>
+            )}
+          </View>
+        )}
+
         {summary && (
           <View style={styles.card}>
-            <MacroBar label="Calories" value={summary.consumed.calories} max={summary.budget.calories} unit="" color={theme.color.accent} />
+            <MacroBar
+              label="Calories"
+              value={hasReservation ? summary.daytimeConsumed.calories : summary.consumed.calories}
+              max={hasReservation ? summary.daytimeBudget.calories : summary.budget.calories}
+              unit=""
+              color={theme.color.accent}
+            />
             <MacroBar label="Protein" value={summary.consumed.protein_g} max={summary.budget.protein_g} color={theme.color.protein} />
             <MacroBar label="Carbs" value={summary.consumed.carbs_g} max={summary.budget.carbs_g} color={theme.color.carbs} />
             <MacroBar label="Fat" value={summary.consumed.fat_g} max={summary.budget.fat_g} color={theme.color.fat} />
@@ -117,6 +170,20 @@ const styles = StyleSheet.create({
     borderColor: theme.color.border,
     marginBottom: theme.space(6),
   },
+  reservationCard: {
+    backgroundColor: theme.color.accentSoft,
+    borderRadius: theme.radius.lg,
+    padding: theme.space(5),
+    borderWidth: 1,
+    borderColor: theme.color.accent + "55",
+    marginBottom: theme.space(4),
+  },
+  reservationHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: theme.space(3) },
+  reservationTitle: { color: theme.color.text, fontSize: 15, fontWeight: "700", flex: 1 },
+  clearLink: { color: theme.color.textMuted, fontSize: 13 },
+  resRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: theme.space(1) },
+  resLabel: { color: theme.color.textMuted, fontSize: 14 },
+  resValue: { color: theme.color.text, fontSize: 14, fontWeight: "600" },
   sectionTitle: { color: theme.color.text, fontSize: 20, fontFamily: theme.font.display, marginBottom: theme.space(3) },
   empty: { color: theme.color.textMuted, fontStyle: "italic" },
   mealRow: {

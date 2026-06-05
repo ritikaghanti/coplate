@@ -4,6 +4,7 @@ import {
   AnalyzePlateRequestSchema,
   CreateMealRequestSchema,
   PizzaModePlanRequestSchema,
+  CreateReservationRequestSchema,
   UpdateDietaryProfileSchema,
   DietaryProfileSchema,
   type DailySummary,
@@ -12,6 +13,8 @@ import {
   sumMacros,
   subtractMacros,
   roundMacros,
+  estimateEventMacros,
+  ZERO_MACROS,
 } from "@coplate/shared";
 import { db, schema } from "../db/index.js";
 import { analyzePlate } from "../lib/vision.js";
@@ -113,6 +116,7 @@ export async function registerRoutes(app: FastifyInstance) {
         loggedDate: todayStr(),
         items: parse.data.items,
         total: parse.data.total,
+        isEventMeal: parse.data.is_event_meal,
       })
       .returning();
 
@@ -121,11 +125,49 @@ export async function registerRoutes(app: FastifyInstance) {
       logged_at: row.loggedAt.toISOString(),
       items: row.items,
       total: row.total,
+      is_event_meal: row.isEventMeal,
     };
     return reply.status(201).send(meal);
   });
 
-  /** Today's rollup for the home screen. */
+  /** Create or replace today's Save Room reservation. */
+  app.post("/reservations", async (request, reply) => {
+    const parse = CreateReservationRequestSchema.safeParse(request.body);
+    if (!parse.success) {
+      return reply.status(400).send({ error: "Invalid request", details: parse.error.flatten() });
+    }
+    const reserve = estimateEventMacros(parse.data.eventCalories);
+    // One reservation per day: clear any existing one first.
+    await db
+      .delete(schema.reservations)
+      .where(eq(schema.reservations.userId, DEMO_USER_ID));
+    const [row] = await db
+      .insert(schema.reservations)
+      .values({
+        userId: DEMO_USER_ID,
+        reservedDate: todayStr(),
+        venueLabel: parse.data.venueLabel,
+        eventTime: parse.data.eventTime,
+        reserve,
+      })
+      .returning();
+    return reply.status(201).send({
+      id: row.id,
+      venueLabel: row.venueLabel,
+      eventTime: row.eventTime,
+      reserve: roundMacros(row.reserve),
+    });
+  });
+
+  /** Clear today's reservation. */
+  app.delete("/reservations/today", async () => {
+    await db
+      .delete(schema.reservations)
+      .where(eq(schema.reservations.userId, DEMO_USER_ID));
+      return { cleared: true };
+  });
+
+  /** Today's rollup for the home screen — reservation-aware. */
   app.get("/summary/today", async () => {
     const rows = await db
       .select()
@@ -137,14 +179,37 @@ export async function registerRoutes(app: FastifyInstance) {
       logged_at: r.loggedAt.toISOString(),
       items: r.items,
       total: r.total,
+      is_event_meal: r.isEventMeal,
     }));
 
-    const consumed = roundMacros(sumMacros(meals.map((m) => m.total)));
+    const [resRow] = await db
+      .select()
+      .from(schema.reservations)
+      .where(eq(schema.reservations.userId, DEMO_USER_ID));
+
+    const reservation = resRow
+      ? { id: resRow.id, venueLabel: resRow.venueLabel, eventTime: resRow.eventTime, reserve: roundMacros(resRow.reserve) }
+      : null;
+    const reserveMacros = resRow ? resRow.reserve : ZERO_MACROS;
+
+    const eventMeals = meals.filter((m) => m.is_event_meal);
+    const daytimeMeals = meals.filter((m) => !m.is_event_meal);
+
+    const consumed = sumMacros(meals.map((m) => m.total));
+    const daytimeConsumed = sumMacros(daytimeMeals.map((m) => m.total));
+    const eventConsumed = sumMacros(eventMeals.map((m) => m.total));
+    const daytimeBudget = subtractMacros(DEFAULT_BUDGET, reserveMacros);
+
     const summary: DailySummary = {
       date: todayStr(),
       budget: DEFAULT_BUDGET,
-      consumed,
+      consumed: roundMacros(consumed),
       remaining: roundMacros(subtractMacros(DEFAULT_BUDGET, consumed)),
+      reservation,
+      daytimeBudget: roundMacros(daytimeBudget),
+      daytimeConsumed: roundMacros(daytimeConsumed),
+      daytimeRemaining: roundMacros(subtractMacros(daytimeBudget, daytimeConsumed)),
+      eventConsumed: roundMacros(eventConsumed),
       meals,
     };
     return summary;

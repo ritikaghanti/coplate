@@ -80,21 +80,43 @@ export const LoggedMealSchema = z.object({
   logged_at: z.string().datetime(),
   items: z.array(FoodItemSchema),
   total: MacrosSchema,
+  is_event_meal: z.boolean().default(false),
 });
 export type LoggedMeal = z.infer<typeof LoggedMealSchema>;
 
 export const CreateMealRequestSchema = z.object({
   items: z.array(FoodItemSchema).min(1),
   total: MacrosSchema,
+  is_event_meal: z.boolean().default(false),
 });
 export type CreateMealRequest = z.infer<typeof CreateMealRequestSchema>;
 
-/** Daily rollup the home screen shows. */
+/** An active Save Room reservation for a given day. */
+export const ReservationSchema = z.object({
+  id: z.string().uuid(),
+  venueLabel: z.string(),
+  eventTime: z.string(),
+  reserve: MacrosSchema,
+});
+export type Reservation = z.infer<typeof ReservationSchema>;
+
+/**
+ * Daily rollup the home screen shows.
+ *
+ * When a reservation exists, `daytimeBudget` = budget − reserve, and the
+ * home screen tracks daytime consumption against that reduced number. Event
+ * meals (the pizza) count against `eventConsumed`, not the daytime budget.
+ */
 export const DailySummarySchema = z.object({
   date: z.string(),
   budget: MacrosSchema,
-  consumed: MacrosSchema,
-  remaining: MacrosSchema,
+  consumed: MacrosSchema.describe("All meals, event + non-event"),
+  remaining: MacrosSchema.describe("budget − consumed (overall)"),
+  reservation: ReservationSchema.nullable(),
+  daytimeBudget: MacrosSchema.describe("budget − reserve (what's left for the day before the event)"),
+  daytimeConsumed: MacrosSchema.describe("Non-event meals only"),
+  daytimeRemaining: MacrosSchema.describe("daytimeBudget − daytimeConsumed"),
+  eventConsumed: MacrosSchema.describe("Event meals only, counts against the reserve"),
   meals: z.array(LoggedMealSchema),
 });
 export type DailySummary = z.infer<typeof DailySummarySchema>;

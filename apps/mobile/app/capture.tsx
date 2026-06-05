@@ -16,6 +16,7 @@ export default function Capture() {
   const [phase, setPhase] = useState<Phase>("camera");
   const [result, setResult] = useState<AnalyzePlateResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isEventMeal, setIsEventMeal] = useState(false);
 
   if (!permission) return <View style={styles.container} />;
   if (!permission.granted) {
@@ -55,7 +56,7 @@ export default function Capture() {
     if (!result) return;
     try {
       setPhase("logging");
-      await logMeal({ items: result.analysis.items, total: result.analysis.total });
+      await logMeal({ items: result.analysis.items, total: result.analysis.total, is_event_meal: isEventMeal });
       router.back();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not log meal");
@@ -125,6 +126,15 @@ export default function Capture() {
 
       {error && <Text style={styles.errorOverlay}>{error}</Text>}
 
+      <Pressable
+        style={[styles.eventToggle, isEventMeal && styles.eventToggleActive]}
+        onPress={() => setIsEventMeal((v) => !v)}
+      >
+        <Text style={[styles.eventToggleText, isEventMeal && styles.eventToggleTextActive]}>
+          {isEventMeal ? "🍽️ This is my event meal" : "Mark as event meal"}
+        </Text>
+      </Pressable>
+
       <Pressable style={styles.primaryBtn} disabled={phase === "logging"} onPress={confirm}>
         {phase === "logging" ? (
           <ActivityIndicator color="#1A140C" />
@@ -183,6 +193,14 @@ const styles = StyleSheet.create({
   notes: { color: theme.color.textMuted, fontStyle: "italic", marginTop: theme.space(4) },
   meta: { color: theme.color.textMuted, fontSize: 12, marginTop: theme.space(4), textAlign: "center" },
   primaryBtn: { backgroundColor: theme.color.accent, borderRadius: theme.radius.pill, paddingVertical: theme.space(5), alignItems: "center", marginTop: theme.space(6) },
+  eventToggle: {
+    borderRadius: theme.radius.pill, borderWidth: 1, borderColor: theme.color.border,
+    paddingVertical: theme.space(4), alignItems: "center", marginTop: theme.space(4),
+    backgroundColor: theme.color.surface,
+  },
+  eventToggleActive: { borderColor: theme.color.accent, backgroundColor: theme.color.accentSoft },
+  eventToggleText: { color: theme.color.textMuted, fontSize: 15, fontWeight: "600" },
+  eventToggleTextActive: { color: theme.color.accent },
   primaryBtnText: { color: "#1A140C", fontSize: 17, fontWeight: "700" },
   secondaryBtn: { paddingVertical: theme.space(4), alignItems: "center", marginTop: theme.space(2) },
   secondaryBtnText: { color: theme.color.textMuted, fontSize: 15 },

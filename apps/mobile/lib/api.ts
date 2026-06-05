@@ -6,6 +6,8 @@ import type {
   PizzaModePlan,
   PizzaModePlanRequest,
   DietaryProfile,
+  Reservation,
+  CreateReservationRequest,
 } from "@coplate/shared";
 
 /**
@@ -14,7 +16,7 @@ import type {
  * the phone — that points at the phone itself. Find your IP with `ipconfig
  * getifaddr en0` (macOS).
  */
- export const API_BASE = "http://10.2.1.5:3000";
+ export const API_BASE = process.env.EXPO_PUBLIC_API_BASE ?? "http://10.2.1.5:3000";
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
@@ -48,6 +50,17 @@ export function planSaveRoom(body: PizzaModePlanRequest): Promise<PizzaModePlan>
     method: "POST",
     body: JSON.stringify(body),
   });
+}
+
+export function createReservation(body: CreateReservationRequest): Promise<Reservation> {
+  return req<Reservation>("/reservations", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function clearReservation(): Promise<{ cleared: boolean }> {
+  return req<{ cleared: boolean }>("/reservations/today", { method: "DELETE" });
 }
 
 export function getProfile(): Promise<DietaryProfile> {
