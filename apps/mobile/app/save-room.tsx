@@ -2,7 +2,7 @@ import { useState } from "react";
 import { View, Text, StyleSheet, Pressable, ScrollView, TextInput, ActivityIndicator } from "react-native";
 import { useRouter } from "expo-router";
 import { VENUE_PRESETS, type PizzaModePlan } from "@coplate/shared";
-import { planPizzaMode } from "../lib/api";
+import { planSaveRoom } from "../lib/api";
 import { theme } from "../lib/theme";
 
 type Phase = "setup" | "loading" | "result";
@@ -30,7 +30,7 @@ export default function PizzaMode() {
     try {
       setError(null);
       setPhase("loading");
-      const result = await planPizzaMode({
+      const result = await planSaveRoom({
         venueLabel: venue.label,
         eventCalories: cals,
         eventTime: time,

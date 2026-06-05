@@ -17,7 +17,8 @@ export default function RootLayout() {
       >
         <Stack.Screen name="index" options={{ title: "Coplate" }} />
         <Stack.Screen name="capture" options={{ title: "Snap your plate", presentation: "modal" }} />
-        <Stack.Screen name="pizza-mode" options={{ title: "Pizza Mode", presentation: "modal" }} />
+        <Stack.Screen name="save-room" options={{ title: "Save Room", presentation: "modal" }} />
+        <Stack.Screen name="profile" options={{ title: "Dietary profile", presentation: "modal" }} />
       </Stack>
     </SafeAreaProvider>
   );

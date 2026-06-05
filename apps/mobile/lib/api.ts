@@ -5,6 +5,7 @@ import type {
   LoggedMeal,
   PizzaModePlan,
   PizzaModePlanRequest,
+  DietaryProfile,
 } from "@coplate/shared";
 
 /**
@@ -42,9 +43,20 @@ export function getTodaySummary(): Promise<DailySummary> {
   return req<DailySummary>("/summary/today");
 }
 
-export function planPizzaMode(body: PizzaModePlanRequest): Promise<PizzaModePlan> {
-  return req<PizzaModePlan>("/pizza-mode/plan", {
+export function planSaveRoom(body: PizzaModePlanRequest): Promise<PizzaModePlan> {
+  return req<PizzaModePlan>("/save-room/plan", {
     method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function getProfile(): Promise<DietaryProfile> {
+  return req<DietaryProfile>("/profile");
+}
+
+export function updateProfile(body: DietaryProfile): Promise<DietaryProfile> {
+  return req<DietaryProfile>("/profile", {
+    method: "PUT",
     body: JSON.stringify(body),
   });
 }

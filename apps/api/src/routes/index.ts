@@ -4,15 +4,18 @@ import {
   AnalyzePlateRequestSchema,
   CreateMealRequestSchema,
   PizzaModePlanRequestSchema,
+  UpdateDietaryProfileSchema,
+  DietaryProfileSchema,
   type DailySummary,
   type LoggedMeal,
+  type DietaryProfile,
   sumMacros,
   subtractMacros,
   roundMacros,
 } from "@coplate/shared";
 import { db, schema } from "../db/index.js";
 import { analyzePlate } from "../lib/vision.js";
-import { buildPizzaModePlan } from "../lib/pizzaMode.js";
+import { buildSaveRoomPlan } from "../lib/saveRoom.js";
 
 // Single implicit user for the Phase-0 slice. Auth replaces this later.
 const DEMO_USER_ID = "00000000-0000-0000-0000-000000000001";
@@ -20,6 +23,20 @@ const DEFAULT_BUDGET = { calories: 2000, protein_g: 150, carbs_g: 200, fat_g: 65
 
 function todayStr(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+/** Load the user's dietary profile, defaulting to no-restriction if unset. */
+async function loadProfile(userId: string): Promise<DietaryProfile> {
+  const [row] = await db
+    .select()
+    .from(schema.dietaryProfiles)
+    .where(eq(schema.dietaryProfiles.userId, userId));
+  if (!row) return DietaryProfileSchema.parse({});
+  return DietaryProfileSchema.parse({
+    dietType: row.dietType,
+    allergies: row.allergies,
+    dislikes: row.dislikes,
+  });
 }
 
 export async function registerRoutes(app: FastifyInstance) {
@@ -44,20 +61,43 @@ export async function registerRoutes(app: FastifyInstance) {
     }
   });
 
-  /** Pizza Mode: reshape today's budget around a planned event. */
-  app.post("/pizza-mode/plan", async (request, reply) => {
+  /** Save Room: reshape today's budget around a planned event. */
+  app.post("/save-room/plan", async (request, reply) => {
     const parse = PizzaModePlanRequestSchema.safeParse(request.body);
     if (!parse.success) {
       return reply.status(400).send({ error: "Invalid request", details: parse.error.flatten() });
     }
     try {
+      const profile = await loadProfile(DEMO_USER_ID);
       // Future: subtract calories already consumed today from DEFAULT_BUDGET.
-      const plan = await buildPizzaModePlan(parse.data, DEFAULT_BUDGET);
+      const plan = await buildSaveRoomPlan(parse.data, DEFAULT_BUDGET, profile);
       return plan;
     } catch (err) {
-      request.log.error(err, "pizza-mode plan failed");
+      request.log.error(err, "save-room plan failed");
       return reply.status(502).send({ error: "Could not build plan" });
     }
+  });
+
+  /** Get the user's dietary profile. */
+  app.get("/profile", async () => {
+    return loadProfile(DEMO_USER_ID);
+  });
+
+  /** Create or update the user's dietary profile (upsert). */
+  app.put("/profile", async (request, reply) => {
+    const parse = UpdateDietaryProfileSchema.safeParse(request.body);
+    if (!parse.success) {
+      return reply.status(400).send({ error: "Invalid request", details: parse.error.flatten() });
+    }
+    const { dietType, allergies, dislikes } = parse.data;
+    await db
+      .insert(schema.dietaryProfiles)
+      .values({ userId: DEMO_USER_ID, dietType, allergies, dislikes })
+      .onConflictDoUpdate({
+        target: schema.dietaryProfiles.userId,
+        set: { dietType, allergies, dislikes, updatedAt: new Date() },
+      });
+    return parse.data;
   });
 
   /** Persist a confirmed meal. */

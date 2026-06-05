@@ -42,7 +42,12 @@ export default function Home() {
           />
         }
       >
-        <Text style={styles.kicker}>TODAY</Text>
+        <View style={styles.topRow}>
+          <Text style={styles.kicker}>TODAY</Text>
+          <Pressable onPress={() => router.push("/profile")}>
+            <Text style={styles.profileLink}>Profile</Text>
+          </Pressable>
+        </View>
 
         <View style={styles.hero}>
           <Text style={[styles.bigNumber, over && { color: theme.color.danger }]}>
@@ -84,8 +89,8 @@ export default function Home() {
       </ScrollView>
 
       <View style={[styles.actionBar, { bottom: insets.bottom + theme.space(6) }]}>
-        <Pressable style={styles.pizzaBtn} onPress={() => router.push("/pizza-mode")}>
-          <Text style={styles.pizzaBtnText}>🍕 Pizza Mode</Text>
+        <Pressable style={styles.pizzaBtn} onPress={() => router.push("/save-room")}>
+          <Text style={styles.pizzaBtnText}>🍽️ Save Room</Text>
         </Pressable>
         <Pressable style={styles.snap} onPress={() => router.push("/capture")}>
           <Text style={styles.snapText}>Snap a plate</Text>
@@ -99,6 +104,8 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.color.bg },
   content: { padding: theme.space(5), paddingBottom: theme.space(28) },
   kicker: { color: theme.color.textMuted, letterSpacing: 3, fontSize: 12, marginBottom: theme.space(2) },
+  topRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  profileLink: { color: theme.color.accent, fontSize: 14, fontWeight: "600" },
   hero: { alignItems: "center", marginVertical: theme.space(6) },
   bigNumber: { color: theme.color.text, fontSize: 72, fontFamily: theme.font.display, fontWeight: "600" },
   bigLabel: { color: theme.color.textMuted, fontSize: 15, marginTop: theme.space(1) },
