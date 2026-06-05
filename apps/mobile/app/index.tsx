@@ -4,12 +4,14 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { DailySummary } from "@coplate/shared";
 import { getTodaySummary, clearReservation } from "../lib/api";
+import { useAuth } from "../lib/AuthContext";
 import { MacroBar } from "../components/MacroBar";
 import { theme } from "../lib/theme";
 
 export default function Home() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { signOut } = useAuth();
   const [summary, setSummary] = useState<DailySummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -58,9 +60,14 @@ export default function Home() {
       >
         <View style={styles.topRow}>
           <Text style={styles.kicker}>TODAY</Text>
-          <Pressable onPress={() => router.push("/profile")}>
-            <Text style={styles.profileLink}>Profile</Text>
-          </Pressable>
+          <View style={{ flexDirection: "row", gap: theme.space(4) }}>
+            <Pressable onPress={() => router.push("/profile")}>
+              <Text style={styles.profileLink}>Profile</Text>
+            </Pressable>
+            <Pressable onPress={signOut}>
+              <Text style={styles.signOutLink}>Sign out</Text>
+            </Pressable>
+          </View>
         </View>
 
         <View style={styles.hero}>
@@ -159,6 +166,7 @@ const styles = StyleSheet.create({
   kicker: { color: theme.color.textMuted, letterSpacing: 3, fontSize: 12, marginBottom: theme.space(2) },
   topRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   profileLink: { color: theme.color.accent, fontSize: 14, fontWeight: "600" },
+  signOutLink: { color: theme.color.textMuted, fontSize: 14 },
   hero: { alignItems: "center", marginVertical: theme.space(6) },
   bigNumber: { color: theme.color.text, fontSize: 72, fontFamily: theme.font.display, fontWeight: "600" },
   bigLabel: { color: theme.color.textMuted, fontSize: 15, marginTop: theme.space(1) },

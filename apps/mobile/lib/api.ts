@@ -8,26 +8,46 @@ import type {
   DietaryProfile,
   Reservation,
   CreateReservationRequest,
+  Credentials,
+  AuthResponse,
 } from "@coplate/shared";
+import { getCachedToken } from "./auth";
 
 /**
  * Set this to your laptop's LAN IP (e.g. http://192.168.1.42:3000) so your
  * iPhone running Expo Go can reach the API. `localhost` will NOT work from
  * the phone — that points at the phone itself. Find your IP with `ipconfig
- * getifaddr en0` (macOS).
+ * getifaddr en0` (macOS). Best set via apps/mobile/.env (EXPO_PUBLIC_API_BASE).
  */
  export const API_BASE = process.env.EXPO_PUBLIC_API_BASE ?? "http://10.2.1.5:3000";
+
+/** Thrown on a 401 so the UI can route back to login. */
+export class UnauthorizedError extends Error {}
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const headers: Record<string, string> = { ...(init?.headers as Record<string, string>) };
   if (init?.body) headers["Content-Type"] = "application/json";
+  // Attach the auth token if we have one.
+  const token = getCachedToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
 
   const res = await fetch(`${API_BASE}${path}`, { ...init, headers });
+  if (res.status === 401) {
+    throw new UnauthorizedError("Not authenticated");
+  }
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`API ${res.status}: ${body}`);
   }
   return res.json() as Promise<T>;
+}
+
+export function signup(body: Credentials): Promise<AuthResponse> {
+  return req<AuthResponse>("/auth/signup", { method: "POST", body: JSON.stringify(body) });
+}
+
+export function login(body: Credentials): Promise<AuthResponse> {
+  return req<AuthResponse>("/auth/login", { method: "POST", body: JSON.stringify(body) });
 }
 
 export function analyzePlate(imageBase64: string): Promise<AnalyzePlateResponse> {

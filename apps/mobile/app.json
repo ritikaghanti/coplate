@@ -16,7 +16,13 @@
     },
     "plugins": [
       "expo-router",
-      ["expo-camera", { "cameraPermission": "Allow Coplate to use your camera to log meals." }]
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Coplate to use your camera to log meals."
+        }
+      ],
+      "expo-secure-store"
     ]
   }
 }
