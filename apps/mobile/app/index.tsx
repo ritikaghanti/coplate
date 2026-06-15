@@ -1,9 +1,10 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl } from "react-native";
+import { Swipeable } from "react-native-gesture-handler";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { DailySummary } from "@coplate/shared";
-import { getTodaySummary, clearReservation } from "../lib/api";
+import { getTodaySummary, clearReservation, deleteMeal } from "../lib/api";
 import { useAuth } from "../lib/AuthContext";
 import { MacroBar } from "../components/MacroBar";
 import { theme } from "../lib/theme";
@@ -33,6 +34,24 @@ export default function Home() {
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not clear");
+    }
+  }
+
+  // Track open swipeables so we can close them programmatically after delete.
+  const swipeRefs = useRef<Record<string, Swipeable | null>>({});
+
+  async function removeMeal(id: string) {
+    swipeRefs.current[id]?.close();
+    // Optimistic: drop it from the list immediately, then sync with the server.
+    setSummary((prev) =>
+      prev ? { ...prev, meals: prev.meals.filter((m) => m.id !== id) } : prev
+    );
+    try {
+      await deleteMeal(id);
+      load(); // refresh totals/budget so the rollup reflects the deletion
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not delete meal");
+      load(); // restore from server if the delete failed
     }
   }
 
@@ -132,17 +151,25 @@ export default function Home() {
           <Text style={styles.empty}>Nothing logged yet. Snap your first plate below.</Text>
         )}
         {summary?.meals.map((m) => (
-          <View key={m.id} style={styles.mealRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.mealItems} numberOfLines={1}>
-                {m.items.map((i) => i.name).join(", ")}
-              </Text>
-              <Text style={styles.mealTime}>
-                {new Date(m.logged_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-              </Text>
+          <Swipeable
+            key={m.id}
+            ref={(r) => { swipeRefs.current[m.id] = r; }}
+            renderRightActions={() => (
+              <Pressable style={styles.deleteAction} onPress={() => removeMeal(m.id)}>
+                <Text style={styles.deleteActionText}>Delete</Text>
+              </Pressable>
+            )}
+            overshootRight={false}
+          >
+            <View style={styles.mealRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.mealItems} numberOfLines={1}>
+                  {m.items.map((i) => i.name).join(", ")}
+                </Text>
+              </View>
+              <Text style={styles.mealCals}>{Math.round(m.total.calories)} kcal</Text>
             </View>
-            <Text style={styles.mealCals}>{Math.round(m.total.calories)} kcal</Text>
-          </View>
+          </Swipeable>
         ))}
 
         {error && <Text style={styles.error}>{error}</Text>}
@@ -162,7 +189,7 @@ export default function Home() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.color.bg },
-  content: { padding: theme.space(5), paddingBottom: theme.space(28) },
+  content: { padding: theme.space(5), paddingBottom: theme.space(48) },
   kicker: { color: theme.color.textMuted, letterSpacing: 3, fontSize: 12, marginBottom: theme.space(2) },
   topRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   profileLink: { color: theme.color.accent, fontSize: 14, fontWeight: "600" },
@@ -207,6 +234,16 @@ const styles = StyleSheet.create({
   mealItems: { color: theme.color.text, fontSize: 15, fontWeight: "500" },
   mealTime: { color: theme.color.textMuted, fontSize: 12, marginTop: 2 },
   mealCals: { color: theme.color.accent, fontWeight: "700" },
+  deleteAction: {
+    backgroundColor: theme.color.danger,
+    justifyContent: "center",
+    alignItems: "center",
+    width: 88,
+    borderRadius: theme.radius.md,
+    marginBottom: theme.space(2),
+    marginLeft: theme.space(2),
+  },
+  deleteActionText: { color: "#fff", fontWeight: "700", fontSize: 15 },
   error: { color: theme.color.danger, marginTop: theme.space(4) },
   actionBar: {
     position: "absolute",
