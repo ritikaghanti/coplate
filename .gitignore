@@ -11,4 +11,4 @@ evals/fixtures/*.jpeg
 evals/fixtures/*.png
 evals/fixtures/manifest.json
 env/
-MIGRATION.sql
+MIGRATION.sql.vscode/
