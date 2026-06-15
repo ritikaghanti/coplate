@@ -10,7 +10,7 @@ type Phase = "setup" | "loading" | "result" | "saving";
 export default function SaveRoom() {
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>("setup");
-  const [venue, setVenue] = useState(VENUE_PRESETS[0]);
+  const [venue, setVenue] = useState<(typeof VENUE_PRESETS)[number]>(VENUE_PRESETS[0]);
   const [calories, setCalories] = useState(String(VENUE_PRESETS[0].calories));
   const [hour, setHour] = useState(8);
   const [minute, setMinute] = useState(0);
