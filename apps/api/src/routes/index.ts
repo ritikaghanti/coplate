@@ -8,6 +8,7 @@ import {
   UpdateDietaryProfileSchema,
   DietaryProfileSchema,
   CredentialsSchema,
+  BarcodeLookupRequestSchema,
   type DailySummary,
   type LoggedMeal,
   type DietaryProfile,
@@ -21,6 +22,7 @@ import { db, schema } from "../db/index.js";
 import { analyzePlate } from "../lib/vision.js";
 import { buildSaveRoomPlan } from "../lib/saveRoom.js";
 import { hashPassword, verifyPassword, signToken, verifyToken } from "../lib/auth.js";
+import { lookupBarcode, ProductNotFoundError, IncompleteNutritionError } from "../lib/openFoodFacts.js";
 
 const DEFAULT_BUDGET = { calories: 2000, protein_g: 150, carbs_g: 200, fat_g: 65 };
 
@@ -115,6 +117,31 @@ export async function registerRoutes(app: FastifyInstance) {
     }
   });
 
+  /** Barcode lookup: resolve a scanned product against Open Food Facts. */
+  app.post("/barcode", async (request, reply) => {
+    if (!requireUser(request, reply)) return;
+    const parse = BarcodeLookupRequestSchema.safeParse(request.body);
+    if (!parse.success) {
+      return reply.status(400).send({ error: "Invalid request", details: parse.error.flatten() });
+    }
+    const started = Date.now();
+    try {
+      const product = await lookupBarcode(parse.data.barcode);
+      const latency_ms = Date.now() - started;
+      request.log.info({ barcode: parse.data.barcode, latency_ms }, "barcode lookup ok");
+      return { product, meta: { source: "openfoodfacts" as const, latency_ms } };
+    } catch (err) {
+      if (err instanceof ProductNotFoundError) {
+        return reply.status(404).send({ error: "We couldn't find that product. Try snapping a photo instead." });
+      }
+      if (err instanceof IncompleteNutritionError) {
+        return reply.status(422).send({ error: "That product has no nutrition data on file. Try a photo instead." });
+      }
+      request.log.error(err, "barcode lookup failed");
+      return reply.status(502).send({ error: "Barcode lookup failed" });
+    }
+  });
+
   /** Save Room: reshape today's budget around a planned event. */
   app.post("/save-room/plan", async (request, reply) => {
     const userId = requireUser(request, reply);
@@ -187,6 +214,21 @@ export async function registerRoutes(app: FastifyInstance) {
       is_event_meal: row.isEventMeal,
     };
     return reply.status(201).send(meal);
+  });
+
+  /** Delete one of the user's meals by id (scoped to the user). */
+  app.delete<{ Params: { id: string } }>("/meals/:id", async (request, reply) => {
+    const userId = requireUser(request, reply);
+    if (!userId) return;
+    const { id } = request.params;
+    const deleted = await db
+      .delete(schema.meals)
+      .where(and(eq(schema.meals.id, id), eq(schema.meals.userId, userId)))
+      .returning({ id: schema.meals.id });
+    if (deleted.length === 0) {
+      return reply.status(404).send({ error: "Meal not found" });
+    }
+    return { deleted: true };
   });
 
   /** Create or replace today's Save Room reservation. */

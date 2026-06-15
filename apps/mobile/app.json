@@ -11,7 +11,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.coplate.app",
       "infoPlist": {
-        "NSCameraUsageDescription": "Coplate uses the camera to identify food on your plate."
+        "NSCameraUsageDescription": "Coplate uses the camera to identify food on your plate.",
+        "NSPhotoLibraryUsageDescription": "Coplate uses your photo library so you can log a meal from an existing photo."
       }
     },
     "plugins": [
@@ -20,6 +21,12 @@
         "expo-camera",
         {
           "cameraPermission": "Allow Coplate to use your camera to log meals."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Coplate to access your photos to log a meal from an existing picture."
         }
       ],
       "expo-secure-store"

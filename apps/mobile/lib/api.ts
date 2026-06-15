@@ -10,6 +10,7 @@ import type {
   CreateReservationRequest,
   Credentials,
   AuthResponse,
+  BarcodeLookupResponse,
 } from "@coplate/shared";
 import { getCachedToken } from "./auth";
 
@@ -57,12 +58,23 @@ export function analyzePlate(imageBase64: string): Promise<AnalyzePlateResponse>
   });
 }
 
+export function lookupBarcode(barcode: string): Promise<BarcodeLookupResponse> {
+  return req<BarcodeLookupResponse>("/barcode", {
+    method: "POST",
+    body: JSON.stringify({ barcode }),
+  });
+}
+
 export function logMeal(body: CreateMealRequest): Promise<LoggedMeal> {
   return req<LoggedMeal>("/meals", { method: "POST", body: JSON.stringify(body) });
 }
 
 export function getTodaySummary(): Promise<DailySummary> {
   return req<DailySummary>("/summary/today");
+}
+
+export function deleteMeal(id: string): Promise<{ deleted: boolean }> {
+  return req<{ deleted: boolean }>(`/meals/${id}`, { method: "DELETE" });
 }
 
 export function planSaveRoom(body: PizzaModePlanRequest): Promise<PizzaModePlan> {

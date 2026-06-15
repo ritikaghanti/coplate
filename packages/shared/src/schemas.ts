@@ -120,3 +120,41 @@ export const DailySummarySchema = z.object({
   meals: z.array(LoggedMealSchema),
 });
 export type DailySummary = z.infer<typeof DailySummarySchema>;
+
+/* ─────────────────────────── Barcode lookup ─────────────────────────── */
+
+/**
+ * Request to look up a product by its scanned barcode (EAN-13/EAN-8/UPC-A).
+ * The API resolves this against Open Food Facts server-side, keeping the
+ * "client only talks to our API" boundary intact.
+ */
+export const BarcodeLookupRequestSchema = z.object({
+  barcode: z.string().min(6).max(20).regex(/^\d+$/, "Barcode must be digits only"),
+});
+export type BarcodeLookupRequest = z.infer<typeof BarcodeLookupRequestSchema>;
+
+/**
+ * A product resolved from Open Food Facts. Macros are PER 100g — the serving
+ * the user actually ate is adjusted in the review UI (we default to 100g and
+ * let them tweak), so we always carry the canonical per-100g figures here.
+ */
+export const BarcodeProductSchema = z.object({
+  barcode: z.string(),
+  name: z.string().min(1).max(200),
+  brand: z.string().max(200).optional(),
+  /** Macros for 100g of the product, as reported by Open Food Facts. */
+  per100g: MacrosSchema,
+  /** OFF's stated serving size string, if any (e.g. "30 g"), purely informational. */
+  serving_size: z.string().max(60).optional(),
+});
+export type BarcodeProduct = z.infer<typeof BarcodeProductSchema>;
+
+/** What the barcode endpoint returns: the product plus observability metadata. */
+export const BarcodeLookupResponseSchema = z.object({
+  product: BarcodeProductSchema,
+  meta: z.object({
+    source: z.literal("openfoodfacts"),
+    latency_ms: z.number(),
+  }),
+});
+export type BarcodeLookupResponse = z.infer<typeof BarcodeLookupResponseSchema>;
